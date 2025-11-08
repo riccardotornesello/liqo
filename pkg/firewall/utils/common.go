@@ -45,6 +45,11 @@ func GetIPValueType(value *string) (firewallv1beta1.IPValueType, error) {
 		return firewallv1beta1.IPValueTypeRange, nil
 	}
 
+	// Check if the value is an IP set.
+	if _, err := GetIPValueSet(*value); err == nil {
+		return firewallv1beta1.IPValueTypeSet, nil
+	}
+
 	return firewallv1beta1.IPValueTypeVoid, fmt.Errorf("invalid match value IP %s", *value)
 }
 
@@ -79,6 +84,23 @@ func GetIPValueRange(s string) (address1, address2 net.IP, err error) {
 	}
 
 	return startIP, endIP, nil
+}
+
+// GetIPValueSet parses the match value and returns the set of IPs.
+func GetIPValueSet(s string) ([]net.IP, error) {
+	parts := strings.Split(s, ",")
+	ips := make([]net.IP, 0, len(parts))
+
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		ip := net.ParseIP(part)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid IP address: %s", part)
+		}
+		ips = append(ips, ip)
+	}
+
+	return ips, nil
 }
 
 // GetPortValueType parses the match value and returns the type of the value.

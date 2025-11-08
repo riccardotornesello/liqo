@@ -47,7 +47,7 @@ func (fr *FilterRuleWrapper) SetName(name string) {
 
 // Add adds the rule to the chain.
 func (fr *FilterRuleWrapper) Add(nftconn *nftables.Conn, chain *nftables.Chain) error {
-	rule, err := forgeFilterRule(fr.FilterRule, chain)
+	rule, err := forgeFilterRule(fr.FilterRule, chain, nftconn)
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (fr *FilterRuleWrapper) Add(nftconn *nftables.Conn, chain *nftables.Chain) 
 // Equal checks if the rule is equal to the given one.
 func (fr *FilterRuleWrapper) Equal(currentrule *nftables.Rule) bool {
 	currentrule.Chain.Table = currentrule.Table
-	newrule, err := forgeFilterRule(fr.FilterRule, currentrule.Chain)
+	newrule, err := forgeFilterRule(fr.FilterRule, currentrule.Chain, nil)
 	// TODO: this ugly exception is caused by an error in the expr retrieved by nftables library.
 	// In particular, the expr retrieved by the library when the action is ctmark
 	// Retrieved expr: &{0 false 3}
@@ -101,7 +101,7 @@ func (fr *FilterRuleWrapper) Equal(currentrule *nftables.Rule) bool {
 }
 
 // forgeFilterRule forges a nftables rule from a FilterRule.
-func forgeFilterRule(fr *firewallv1beta1.FilterRule, chain *nftables.Chain) (*nftables.Rule, error) {
+func forgeFilterRule(fr *firewallv1beta1.FilterRule, chain *nftables.Chain, nftconn *nftables.Conn) (*nftables.Rule, error) {
 	rule := &nftables.Rule{
 		Table:    chain.Table,
 		Chain:    chain,
@@ -109,7 +109,7 @@ func forgeFilterRule(fr *firewallv1beta1.FilterRule, chain *nftables.Chain) (*nf
 	}
 
 	for i := range fr.Match {
-		if err := applyMatch(&fr.Match[i], rule); err != nil {
+		if err := applyMatch(&fr.Match[i], rule, nftconn); err != nil {
 			return nil, err
 		}
 	}

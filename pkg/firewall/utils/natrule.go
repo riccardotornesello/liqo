@@ -47,7 +47,7 @@ func (nr *NatRuleWrapper) SetName(name string) {
 
 // Add adds the rule to the chain.
 func (nr *NatRuleWrapper) Add(nftconn *nftables.Conn, chain *nftables.Chain) error {
-	rule, err := forgeNatRule(nr.NatRule, chain)
+	rule, err := forgeNatRule(nr.NatRule, chain, nftconn)
 	if err != nil {
 		return err
 	}
@@ -59,7 +59,7 @@ func (nr *NatRuleWrapper) Add(nftconn *nftables.Conn, chain *nftables.Chain) err
 // Equal checks if the rule is equal to the given one.
 func (nr *NatRuleWrapper) Equal(currentrule *nftables.Rule) bool {
 	currentrule.Chain.Table = currentrule.Table
-	newrule, err := forgeNatRule(nr.NatRule, currentrule.Chain)
+	newrule, err := forgeNatRule(nr.NatRule, currentrule.Chain, nil)
 	if err != nil {
 		return false
 	}
@@ -91,7 +91,7 @@ func (nr *NatRuleWrapper) Equal(currentrule *nftables.Rule) bool {
 	return true
 }
 
-func forgeNatRule(nr *firewallv1beta1.NatRule, chain *nftables.Chain) (*nftables.Rule, error) {
+func forgeNatRule(nr *firewallv1beta1.NatRule, chain *nftables.Chain, nftconn *nftables.Conn) (*nftables.Rule, error) {
 	rule := &nftables.Rule{
 		Table:    chain.Table,
 		Chain:    chain,
@@ -99,7 +99,7 @@ func forgeNatRule(nr *firewallv1beta1.NatRule, chain *nftables.Chain) (*nftables
 	}
 
 	for i := range nr.Match {
-		if err := applyMatch(&nr.Match[i], rule); err != nil {
+		if err := applyMatch(&nr.Match[i], rule, nftconn); err != nil {
 			return nil, err
 		}
 	}

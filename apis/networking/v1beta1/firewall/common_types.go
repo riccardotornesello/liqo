@@ -26,6 +26,8 @@ const (
 	IPValueTypeVoid IPValueType = "void"
 	// IPValueTypeRange is a string representing a range of IPs (eg. 10.0.0.1-10.0.0.20).
 	IPValueTypeRange IPValueType = "range"
+	// IPValueTypeSet is a string representing a set of IPs (eg. 10.0.0.1,10.0.0.2,10.0.0.0).
+	IPValueTypeSet IPValueType = "set"
 )
 
 // PortValueType is the type of the match value.

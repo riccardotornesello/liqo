@@ -59,16 +59,23 @@ func checkFilterRuleIPValue(mIP *firewallapi.MatchIP) error {
 		if net.ParseIP(mIP.Value) == nil {
 			return fmt.Errorf("invalid IP %s", mIP.Value)
 		}
+
 	case firewallapi.IPValueTypeSubnet:
 		if _, _, err := net.ParseCIDR(mIP.Value); err != nil {
 			return fmt.Errorf("invalid subnet %s", mIP.Value)
 		}
+
 	case firewallapi.IPValueTypeRange:
 		if err := checkGranularRangeIP(mIP); err != nil {
 			return fmt.Errorf("invalid range %s", mIP.Value)
 		}
+
+	case firewallapi.IPValueTypeSet:
+		return nil // No validation for sets
+
 	default:
 		return fmt.Errorf("invalid IP value type %s", IPValueType)
+
 	}
 	return nil
 }

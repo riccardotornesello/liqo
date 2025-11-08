@@ -28,7 +28,7 @@ import (
 	"github.com/liqotech/liqo/pkg/utils/network/port"
 )
 
-func applyMatch(m *firewallv1beta1.Match, rule *nftables.Rule) error {
+func applyMatch(m *firewallv1beta1.Match, rule *nftables.Rule, nftconn *nftables.Conn) error {
 	op, err := getMatchCmpOp(m)
 	if err != nil {
 		return err
@@ -47,7 +47,7 @@ func applyMatch(m *firewallv1beta1.Match, rule *nftables.Rule) error {
 		}
 	}
 	if m.IP != nil {
-		err = applyMatchIP(m, rule, op)
+		err = applyMatchIP(m, rule, op, nftconn)
 		if err != nil {
 			return err
 		}
@@ -61,7 +61,7 @@ func applyMatch(m *firewallv1beta1.Match, rule *nftables.Rule) error {
 	return nil
 }
 
-func applyMatchIP(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp) error {
+func applyMatchIP(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp, nftconn *nftables.Conn) error {
 	matchIPValueType, err := GetIPValueType(&m.IP.Value)
 	if err != nil {
 		return err
@@ -74,6 +74,11 @@ func applyMatchIP(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp) 
 		return applyMatchIPPoolSubnet(m, rule, op)
 	case firewallv1beta1.IPValueTypeRange:
 		return applyMatchIPRange(m, rule, op)
+	case firewallv1beta1.IPValueTypeSet:
+		if nftconn == nil {
+			return fmt.Errorf("nftables connection is required to apply IP set match")
+		}
+		return applyMatchIPSet(m, rule, op, nftconn)
 	default:
 		return fmt.Errorf("invalid match value type %s", matchIPValueType)
 	}
@@ -280,6 +285,50 @@ func applyMatchIPRange(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.Cm
 			Register: 1,
 			FromData: startIPBytes,
 			ToData:   endIPBytes,
+		},
+	)
+
+	return nil
+}
+
+func applyMatchIPSet(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp, nftconn *nftables.Conn) error {
+	posOffset, err := getMatchIPPositionOffset(m)
+	if err != nil {
+		return err
+	}
+
+	ips, err := GetIPValueSet(m.IP.Value)
+	if err != nil {
+		return err
+	}
+
+	set := &nftables.Set{
+		Anonymous: true,
+		Constant:  true,
+		Table:     rule.Table,
+		KeyType:   nftables.TypeIPAddr,
+	}
+
+	setElements := make([]nftables.SetElement, len(ips))
+	for i, ip := range ips {
+		setElements[i] = nftables.SetElement{Key: ip.To4()}
+	}
+
+	if err := nftconn.AddSet(set, setElements); err != nil {
+		return fmt.Errorf("unable to create nftables set: %w", err)
+	}
+
+	rule.Exprs = append(rule.Exprs,
+		&expr.Payload{
+			DestRegister: 1,
+			Base:         expr.PayloadBaseNetworkHeader,
+			Offset:       posOffset,
+			Len:          4,
+		},
+		&expr.Lookup{
+			SourceRegister: 1,
+			SetID:          set.ID,
+			SetName:        set.Name,
 		},
 	)
 
