@@ -445,13 +445,23 @@ func compareIPSetElements(elements []nftables.SetElement, expectedIPs []net.IP) 
 	// Create a map of expected IPs for efficient lookup
 	expectedMap := make(map[string]bool)
 	for _, ip := range expectedIPs {
-		expectedMap[ip.To4().String()] = true
+		ipv4 := ip.To4()
+		if ipv4 == nil {
+			// Skip non-IPv4 addresses
+			continue
+		}
+		expectedMap[ipv4.String()] = true
 	}
 
 	// Check if all elements are in the expected set
 	for _, elem := range elements {
 		ip := net.IP(elem.Key)
-		if !expectedMap[ip.To4().String()] {
+		ipv4 := ip.To4()
+		if ipv4 == nil {
+			// Non-IPv4 address in set - consider not equal
+			return false
+		}
+		if !expectedMap[ipv4.String()] {
 			return false
 		}
 	}
