@@ -54,7 +54,7 @@ func existRule(nftrules []*nftables.Rule, rule firewallutils.Rule) bool {
 // isRuleOutdated checks if the rule has to be deleted.
 // A rule must be deleted when it's properties change
 // or when it is not contained in the FirewallConfiguration CRD.
-func isRuleOutdated(nftrule *nftables.Rule, rules []firewallutils.Rule) (outdated bool, ruleName string) {
+func isRuleOutdated(nftrule *nftables.Rule, rules []firewallutils.Rule, nftconn *nftables.Conn) (outdated bool, ruleName string) {
 	nftRuleName, nftRuleHasName := userdata.GetString(nftrule.UserData, userdata.TypeComment)
 	if !nftRuleHasName {
 		return true, nftRuleName
@@ -66,7 +66,7 @@ func isRuleOutdated(nftrule *nftables.Rule, rules []firewallutils.Rule) (outdate
 			continue
 		}
 		// if rule names are equal, check if the rule has been modified
-		if !rules[i].Equal(nftrule) {
+		if !rules[i].Equal(nftrule, nftconn) {
 			// if the rule has been modified, delete it
 			return true, nftRuleName
 		}

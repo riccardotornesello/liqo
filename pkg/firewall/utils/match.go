@@ -390,3 +390,81 @@ func ifname(n string) []byte {
 	copy(b, n+"\x00")
 	return b
 }
+
+// equalIPSetRuleExprs compares two rules that contain IP set matches.
+// It compares the IP set content from the current rule with the expected IPs from the matches.
+// This function is used when standard expression comparison cannot be used due to the
+// anonymous nature of nftables sets (each set gets a unique ID).
+func equalIPSetRuleExprs(currentRule *nftables.Rule, matches []firewallv1beta1.Match, nftconn *nftables.Conn) bool {
+	// Get the expected IP sets from the match specifications
+	expectedIPSets := getExpectedIPSets(matches)
+	if len(expectedIPSets) == 0 {
+		return false
+	}
+
+	// Get Lookup expressions from the current rule to find the set names
+	var currentSetNames []string
+	for _, e := range currentRule.Exprs {
+		if lookup, ok := e.(*expr.Lookup); ok {
+			currentSetNames = append(currentSetNames, lookup.SetName)
+		}
+	}
+
+	// If the number of sets doesn't match the expected, rules are different
+	if len(currentSetNames) != len(expectedIPSets) {
+		return false
+	}
+
+	// Get the actual IP set elements from nftables and compare them
+	for i, setName := range currentSetNames {
+		set, err := nftconn.GetSetByName(currentRule.Table, setName)
+		if err != nil {
+			return false
+		}
+
+		elements, err := nftconn.GetSetElements(set)
+		if err != nil {
+			return false
+		}
+
+		// Compare the elements with the expected IPs
+		if !compareIPSetElements(elements, expectedIPSets[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// compareIPSetElements compares nftables set elements with expected IPs.
+func compareIPSetElements(elements []nftables.SetElement, expectedIPs []net.IP) bool {
+	if len(elements) != len(expectedIPs) {
+		return false
+	}
+
+	// Create a map of expected IPs for efficient lookup
+	expectedMap := make(map[string]bool)
+	for _, ip := range expectedIPs {
+		ipv4 := ip.To4()
+		if ipv4 == nil {
+			// Skip non-IPv4 addresses
+			continue
+		}
+		expectedMap[ipv4.String()] = true
+	}
+
+	// Check if all elements are in the expected set
+	for _, elem := range elements {
+		ip := net.IP(elem.Key)
+		ipv4 := ip.To4()
+		if ipv4 == nil {
+			// Non-IPv4 address in set - consider not equal
+			return false
+		}
+		if !expectedMap[ipv4.String()] {
+			return false
+		}
+	}
+
+	return true
+}

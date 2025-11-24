@@ -57,9 +57,9 @@ func (fr *FilterRuleWrapper) Add(nftconn *nftables.Conn, chain *nftables.Chain) 
 }
 
 // Equal checks if the rule is equal to the given one.
-func (fr *FilterRuleWrapper) Equal(currentrule *nftables.Rule) bool {
+func (fr *FilterRuleWrapper) Equal(currentrule *nftables.Rule, nftconn *nftables.Conn) bool {
 	currentrule.Chain.Table = currentrule.Table
-	newrule, err := forgeFilterRule(fr.FilterRule, currentrule.Chain, nil)
+	newrule, err := forgeFilterRule(fr.FilterRule, currentrule.Chain, nftconn)
 	// TODO: this ugly exception is caused by an error in the expr retrieved by nftables library.
 	// In particular, the expr retrieved by the library when the action is ctmark
 	// Retrieved expr: &{0 false 3}
@@ -71,6 +71,10 @@ func (fr *FilterRuleWrapper) Equal(currentrule *nftables.Rule) bool {
 	}
 	if err != nil {
 		return false
+	}
+	// If the rule has IP set matches, compare the set content directly
+	if HasIPSetMatch(fr.FilterRule.Match) {
+		return equalIPSetRuleExprs(currentrule, fr.FilterRule.Match, nftconn)
 	}
 	if len(currentrule.Exprs) != len(newrule.Exprs) {
 		return false

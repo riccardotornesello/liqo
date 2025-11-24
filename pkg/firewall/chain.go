@@ -249,7 +249,7 @@ func cleanChain(nftconn *nftables.Conn, chain *firewallapi.Chain, nftChain *nfta
 	rules := FromChainToRulesArray(chain)
 	for i := range nftRules {
 		// If the rule is outdated, delete it.
-		outdated, ruleName := isRuleOutdated(nftRules[i], rules)
+		outdated, ruleName := isRuleOutdated(nftRules[i], rules, nftconn)
 		if outdated {
 			klog.V(2).Infof("deleting rule %s from chain %s", ruleName, nftChain.Name)
 			if err := nftconn.DelRule(nftRules[i]); err != nil {

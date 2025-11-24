@@ -121,3 +121,33 @@ func GetPortValueType(value *string) (firewallv1beta1.PortValueType, error) {
 
 	return firewallv1beta1.PortValueTypeVoid, fmt.Errorf("invalid match value %s", *value)
 }
+
+// HasIPSetMatch checks if any match in the slice is an IP set match.
+func HasIPSetMatch(matches []firewallv1beta1.Match) bool {
+	for i := range matches {
+		if matches[i].IP != nil {
+			ipType, err := GetIPValueType(&matches[i].IP.Value)
+			if err == nil && ipType == firewallv1beta1.IPValueTypeSet {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// getExpectedIPSets extracts the expected IP sets from the match specifications.
+func getExpectedIPSets(matches []firewallv1beta1.Match) [][]net.IP {
+	var ipSets [][]net.IP
+	for i := range matches {
+		if matches[i].IP != nil {
+			ipType, err := GetIPValueType(&matches[i].IP.Value)
+			if err == nil && ipType == firewallv1beta1.IPValueTypeSet {
+				ips, err := GetIPValueSet(matches[i].IP.Value)
+				if err == nil {
+					ipSets = append(ipSets, ips)
+				}
+			}
+		}
+	}
+	return ipSets
+}
