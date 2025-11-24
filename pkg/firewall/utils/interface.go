@@ -21,5 +21,5 @@ type Rule interface {
 	GetName() *string
 	SetName(string)
 	Add(nftconn *nftables.Conn, chain *nftables.Chain) error
-	Equal(rule *nftables.Rule) bool
+	Equal(rule *nftables.Rule, nftconn *nftables.Conn) bool
 }

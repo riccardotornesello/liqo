@@ -57,11 +57,15 @@ func (nr *NatRuleWrapper) Add(nftconn *nftables.Conn, chain *nftables.Chain) err
 }
 
 // Equal checks if the rule is equal to the given one.
-func (nr *NatRuleWrapper) Equal(currentrule *nftables.Rule) bool {
+func (nr *NatRuleWrapper) Equal(currentrule *nftables.Rule, nftconn *nftables.Conn) bool {
 	currentrule.Chain.Table = currentrule.Table
-	newrule, err := forgeNatRule(nr.NatRule, currentrule.Chain, nil)
+	newrule, err := forgeNatRule(nr.NatRule, currentrule.Chain, nftconn)
 	if err != nil {
 		return false
+	}
+	// If the rule has IP set matches, compare the set content directly
+	if HasIPSetMatch(nr.NatRule.Match) {
+		return equalIPSetRuleExprs(currentrule, nr.NatRule.Match, nftconn)
 	}
 	if len(currentrule.Exprs) != len(newrule.Exprs) {
 		return false

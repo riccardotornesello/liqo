@@ -44,7 +44,7 @@ func (rr *RouteRuleWrapper) Add(_ *nftables.Conn, _ *nftables.Chain) error {
 }
 
 // Equal checks if the rule is equal to the given one.
-func (rr *RouteRuleWrapper) Equal(_ *nftables.Rule) bool {
+func (rr *RouteRuleWrapper) Equal(_ *nftables.Rule, _ *nftables.Conn) bool {
 	// TODO: implement
 	return true
 }
