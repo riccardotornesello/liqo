@@ -22,6 +22,17 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// IngressPolicy defines the policy for ingress traffic from a remote cluster.
+// +kubebuilder:validation:Enum=allow;isolate
+type IngressPolicy string
+
+const (
+	// IngressPolicyAllow allows all ingress traffic from a remote cluster.
+	IngressPolicyAllow IngressPolicy = "allow"
+	// IngressPolicyIsolate allows only traffic from owned namespaces.
+	IngressPolicyIsolate IngressPolicy = "isolate"
+)
+
 // ConfigurationResource the name of the configuration resources.
 var ConfigurationResource = "configurations"
 
@@ -48,12 +59,20 @@ type ClusterConfig struct {
 	CIDR ClusterConfigCIDR `json:"cidr,omitempty"`
 }
 
+// SecurityOptions defines security options for the cluster.
+type SecurityOptions struct {
+	// IngressPolicy defines the policy for ingress traffic from a remote cluster.
+	Ingress *IngressPolicy `json:"ingress,omitempty"`
+}
+
 // ConfigurationSpec defines the desired state of Configuration.
 type ConfigurationSpec struct {
 	// Local network configuration (the cluster where the resource is created).
 	Local *ClusterConfig `json:"local,omitempty"`
 	// Remote network configuration (the other cluster).
 	Remote ClusterConfig `json:"remote,omitempty"`
+	// SecurityOptions defines security options for the cluster.
+	Security *SecurityOptions `json:"security,omitempty"`
 }
 
 // ConfigurationStatus defines the observed state of Configuration.

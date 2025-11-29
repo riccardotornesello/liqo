@@ -5,39 +5,19 @@ import (
 	"fmt"
 
 	networkingv1beta1 "github.com/liqotech/liqo/apis/networking/v1beta1"
-	networkingv1beta1firewall "github.com/liqotech/liqo/apis/networking/v1beta1/firewall"
 	"github.com/liqotech/liqo/pkg/consts"
-	"github.com/liqotech/liqo/pkg/firewall"
 	configuration "github.com/liqotech/liqo/pkg/liqo-controller-manager/networking/external-network/configuration"
-	tenantnamespace "github.com/liqotech/liqo/pkg/tenantNamespace"
-	"github.com/liqotech/liqo/pkg/utils/resource"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-)
-
-const (
-	// gatewayResourceNamePrefix is the prefix used for naming gateway FirewallConfiguration resources.
-	gatewayResourceNamePrefix = "security-gateway"
-
-	// gatewayTableName is the name of the firewall table used by the gateway FirewallConfiguration.
-	gatewayTableName = "cluster-security"
-
-	// firewallCategoryTargetValueGw is the value used by the securityconfiguration controller to reconcile only resources related to a gateway.
-	firewallCategoryTargetValueGw = "gateway"
-
-	// firewallSubCategoryTargetValueSecurity is the value used by the securityconfiguration controller to reconcile only resources related to the IP mapping.
-	firewallSubCategoryTargetValueSecurity = "security"
 )
 
 type TestReconciler struct {
@@ -119,84 +99,6 @@ func (r *TestReconciler) podEnqueuer(ctx context.Context, obj client.Object) []c
 
 	klog.Infof("Enqueuing Configuration for Pod %s on Node %s", pod.Name, nodeName)
 	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: nodeName, Namespace: forgeNamespaceName(nodeName)}}}
-}
-
-func forgeNamespaceName(clusterID string) string {
-	return fmt.Sprintf("%s-%s", tenantnamespace.NamePrefix, clusterID)
-}
-
-func forgeGatewayResourceName(clusterID string) string {
-	return fmt.Sprintf("%s-%s", gatewayResourceNamePrefix, clusterID)
-}
-
-func forgeGatewayLabels(clusterID string) map[string]string {
-	return map[string]string{
-		firewall.FirewallCategoryTargetKey:    firewallCategoryTargetValueGw,
-		firewall.FirewallSubCategoryTargetKey: firewallSubCategoryTargetValueSecurity,
-		firewall.FirewallUniqueTargetKey:      string(clusterID),
-	}
-}
-
-func forgeGatewaySpec() *networkingv1beta1.FirewallConfigurationSpec {
-	return &networkingv1beta1.FirewallConfigurationSpec{
-		Table: networkingv1beta1firewall.Table{
-			Name:   ptr.To(gatewayTableName),
-			Family: ptr.To(networkingv1beta1firewall.TableFamilyIPv4),
-			Chains: []networkingv1beta1firewall.Chain{},
-		},
-	}
-}
-
-func getConfigurationRemoteClusterID(cfg *networkingv1beta1.Configuration) (string, error) {
-	remoteClusterID, ok := cfg.Labels[string(consts.RemoteClusterID)]
-	if !ok {
-		return "", fmt.Errorf("configuration %q has no remote cluster ID label", cfg.Name)
-	}
-	return remoteClusterID, nil
-}
-
-func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, cfg *networkingv1beta1.Configuration) error {
-	remoteClusterID, err := getConfigurationRemoteClusterID(cfg)
-	if err != nil {
-		return err
-	}
-
-	fwcfg := &networkingv1beta1.FirewallConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      forgeGatewayResourceName(remoteClusterID),
-			Namespace: forgeNamespaceName(remoteClusterID),
-		},
-	}
-
-	klog.Infof("Creating firewall configuration %q for %q", fwcfg.Name, remoteClusterID)
-
-	if _, err := resource.CreateOrUpdate(
-		ctx, cl, fwcfg,
-		mutateGatewayConfiguration(fwcfg, cfg),
-	); err != nil {
-		return err
-	}
-
-	klog.Infof("Firewall configuration %q for %q created", fwcfg.Name, remoteClusterID)
-
-	return nil
-}
-
-func mutateGatewayConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, cfg *networkingv1beta1.Configuration) func() error {
-	return func() error {
-		if cfg.Labels == nil {
-			return fmt.Errorf("configuration %q has no labels", cfg.Name)
-		}
-
-		remoteClusterID, err := getConfigurationRemoteClusterID(cfg)
-		if err != nil {
-			return err
-		}
-
-		fwcfg.SetLabels(forgeGatewayLabels(remoteClusterID))
-		fwcfg.Spec = *forgeGatewaySpec()
-		return controllerutil.SetOwnerReference(cfg, fwcfg, scheme)
-	}
 }
 
 func (r *TestReconciler) SetupWithManager(mgr ctrl.Manager) error {
