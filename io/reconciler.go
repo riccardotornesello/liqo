@@ -67,9 +67,17 @@ func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		}
 	}
 
+	// Reconcile the gateway FirewallConfiguration.
 	if err := createOrUpdateGatewayConfiguration(ctx, r.Client, conf, podIps); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update gateway configuration for configuration %q: %w", req.NamespacedName, err)
 	}
+
+	// Reconcile the fabric FirewallConfiguration.
+	if err := createOrUpdateFabricConfiguration(ctx, r.Client, conf, podIps); err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to create or update fabric configuration for configuration %q: %w", req.NamespacedName, err)
+	}
+
+	klog.Infof("Reconciliation of configuration %q completed", req.NamespacedName)
 
 	return ctrl.Result{}, nil
 }
