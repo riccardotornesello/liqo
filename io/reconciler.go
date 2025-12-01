@@ -7,6 +7,7 @@ import (
 	networkingv1beta1 "github.com/liqotech/liqo/apis/networking/v1beta1"
 	"github.com/liqotech/liqo/pkg/consts"
 	configuration "github.com/liqotech/liqo/pkg/liqo-controller-manager/networking/external-network/configuration"
+	"github.com/liqotech/liqo/pkg/virtualKubelet/forge"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +34,8 @@ func NewTestReconciler(cl client.Client, s *runtime.Scheme) *TestReconciler {
 }
 
 func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	klog.Infof("-----------------------------")
+
 	conf := &networkingv1beta1.Configuration{}
 	if err := r.Client.Get(ctx, req.NamespacedName, conf); err != nil {
 		if errors.IsNotFound(err) {
@@ -43,36 +46,28 @@ func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 	klog.Infof("Reconciling configuration %q", req.NamespacedName)
 
+	// Get the pods coming from the remote cluster.
 	remoteClusterID, err := getConfigurationRemoteClusterID(conf)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to get remote cluster ID for configuration %q: %w", req.NamespacedName, err)
 	}
 	klog.Infof("Configuration %q refers to remote cluster %q", req.NamespacedName, remoteClusterID)
 
-	// Get the pods hosted on the node associated with this configuration.
 	podList := &corev1.PodList{}
 	if err := r.Client.List(ctx, podList, client.MatchingLabels{
-		consts.LocalPodLabelKey: consts.LocalPodLabelValue,
+		forge.LiqoOriginClusterIDKey: remoteClusterID,
 	}); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to list pods: %w", err)
 	}
 
-	podsInCluster := []*corev1.Pod{}
-	for i := range podList.Items {
-		pod := &podList.Items[i]
-		if pod.Spec.NodeName == remoteClusterID {
-			podsInCluster = append(podsInCluster, pod)
+	podIps := make([]string, 0, len(podList.Items))
+	for _, pod := range podList.Items {
+		if pod.Status.PodIP != "" {
+			podIps = append(podIps, pod.Status.PodIP)
 		}
 	}
 
-	klog.Infof("Found %d pods on node %s", len(podsInCluster), remoteClusterID)
-
-	// Just for testing purposes, we log the names of the pods found.
-	for _, pod := range podsInCluster {
-		klog.Infof("Pod %s/%s is hosted on node %s", pod.Namespace, pod.Name, remoteClusterID)
-	}
-
-	if err := createOrUpdateGatewayConfiguration(ctx, r.Client, conf); err != nil {
+	if err := createOrUpdateGatewayConfiguration(ctx, r.Client, conf, podIps); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update gateway configuration for configuration %q: %w", req.NamespacedName, err)
 	}
 

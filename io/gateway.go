@@ -30,45 +30,75 @@ func forgeGatewayLabels(clusterID string) map[string]string {
 	}
 }
 
-func forgeGatewaySpec(cfg *networkingv1beta1.Configuration) (*networkingv1beta1.FirewallConfigurationSpec, error) {
-	filterRules := []networkingv1beta1firewall.FilterRule{
-		// Always accept traffic not coming from the tunnel interface or going to the main interface.
-		{
-			Action: networkingv1beta1firewall.ActionAccept,
-			Match: []networkingv1beta1firewall.Match{{
-				Dev: &networkingv1beta1firewall.MatchDev{
-					Position: networkingv1beta1firewall.MatchDevPositionIn,
-					Value:    tunnel.TunnelInterfaceName,
-				},
-				Op: networkingv1beta1firewall.MatchOperationNeq,
-			}},
-		},
-		{
-			Action: networkingv1beta1firewall.ActionAccept,
-			Match: []networkingv1beta1firewall.Match{{
-				Dev: &networkingv1beta1firewall.MatchDev{
-					Position: networkingv1beta1firewall.MatchDevPositionOut,
-					Value:    "eth0", // TODO: variable?
-				},
-				Op: networkingv1beta1firewall.MatchOperationEq,
-			}},
-		},
-		// TODO: Allow established and related connections.
+func forgeGatewaySpec(cfg *networkingv1beta1.Configuration, podIps []string) (*networkingv1beta1.FirewallConfigurationSpec, error) {
+	filterRules := []networkingv1beta1firewall.FilterRule{}
+	chainPolicy := networkingv1beta1firewall.ChainPolicyAccept
+
+	// Generate the set containing the pod IPs of the remote cluster
+	setElements := make([]networkingv1beta1firewall.SetElement, 0, len(podIps))
+	for _, ip := range podIps {
+		setElements = append(setElements, networkingv1beta1firewall.SetElement{
+			Key: ip,
+		})
 	}
 
+	sets := []networkingv1beta1firewall.Set{{
+		Name:     gatewayPodIPsSetName,
+		KeyType:  networkingv1beta1firewall.SetDataTypeIPAddr,
+		Elements: setElements,
+	}}
+
+	// Configure ingress rules based on the configuration spec
 	if cfg.Spec.Security != nil && cfg.Spec.Security.Ingress != nil {
 		switch *cfg.Spec.Security.Ingress {
 		case networkingv1beta1.IngressPolicyAllow:
-			// Do nothing, all traffic is allowed.
+			// No specific rules needed, accept all traffic.
+
 		case networkingv1beta1.IngressPolicyIsolate:
+			chainPolicy = networkingv1beta1firewall.ChainPolicyDrop
+
+			filterRules = []networkingv1beta1firewall.FilterRule{
+				// Always accept traffic not coming from the tunnel interface or going to the main interface.
+				{
+					Action: networkingv1beta1firewall.ActionAccept,
+					Match: []networkingv1beta1firewall.Match{{
+						Dev: &networkingv1beta1firewall.MatchDev{
+							Position: networkingv1beta1firewall.MatchDevPositionIn,
+							Value:    tunnel.TunnelInterfaceName,
+						},
+						Op: networkingv1beta1firewall.MatchOperationNeq,
+					}},
+				},
+				{
+					Action: networkingv1beta1firewall.ActionAccept,
+					Match: []networkingv1beta1firewall.Match{{
+						Dev: &networkingv1beta1firewall.MatchDev{
+							Position: networkingv1beta1firewall.MatchDevPositionOut,
+							Value:    "eth0", // TODO: variable?
+						},
+						Op: networkingv1beta1firewall.MatchOperationEq,
+					}},
+				},
+				// Allow established and related connections.
+				{
+					Action: networkingv1beta1firewall.ActionAccept,
+					Match: []networkingv1beta1firewall.Match{{
+						CtState: &networkingv1beta1firewall.MatchCtState{
+							Value: []networkingv1beta1firewall.CtStateValue{"established", "related"},
+						},
+						Op: networkingv1beta1firewall.MatchOperationEq,
+					}},
+				},
+			}
+
 			// Accept only traffic destined to the cluster CIDR coming from the tunnel interface.
 			filterRules = append(filterRules, networkingv1beta1firewall.FilterRule{
 				Action: networkingv1beta1firewall.ActionAccept,
 				Match: []networkingv1beta1firewall.Match{
 					{
 						IP: &networkingv1beta1firewall.MatchIP{
-							Position: networkingv1beta1firewall.MatchPositionSrc,
-							Value:    "8.8.8.8", // TODO: use real IP mapping.
+							Position: networkingv1beta1firewall.MatchPositionDst,
+							Value:    fmt.Sprintf("@%s", gatewayPodIPsSetName),
 						},
 						Op: networkingv1beta1firewall.MatchOperationEq,
 					},
@@ -83,10 +113,11 @@ func forgeGatewaySpec(cfg *networkingv1beta1.Configuration) (*networkingv1beta1.
 		Table: networkingv1beta1firewall.Table{
 			Name:   ptr.To(gatewayTableName),
 			Family: ptr.To(networkingv1beta1firewall.TableFamilyIPv4),
+			Sets:   sets,
 			Chains: []networkingv1beta1firewall.Chain{{
 				Name:     ptr.To(gatewayChainName),
 				Hook:     ptr.To(networkingv1beta1firewall.ChainHookPostrouting),
-				Policy:   ptr.To(networkingv1beta1firewall.ChainPolicyDrop),
+				Policy:   ptr.To(chainPolicy),
 				Priority: ptr.To[networkingv1beta1firewall.ChainPriority](200),
 				Type:     ptr.To(networkingv1beta1firewall.ChainTypeFilter),
 				Rules: networkingv1beta1firewall.RulesSet{
@@ -97,7 +128,7 @@ func forgeGatewaySpec(cfg *networkingv1beta1.Configuration) (*networkingv1beta1.
 	}, nil
 }
 
-func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, cfg *networkingv1beta1.Configuration) error {
+func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, cfg *networkingv1beta1.Configuration, podIps []string) error {
 	remoteClusterID, err := getConfigurationRemoteClusterID(cfg)
 	if err != nil {
 		return err
@@ -114,7 +145,7 @@ func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, c
 
 	if _, err := resource.CreateOrUpdate(
 		ctx, cl, fwcfg,
-		mutateGatewayConfiguration(fwcfg, cfg),
+		mutateGatewayConfiguration(fwcfg, cfg, podIps),
 	); err != nil {
 		return err
 	}
@@ -124,7 +155,7 @@ func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, c
 	return nil
 }
 
-func mutateGatewayConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, cfg *networkingv1beta1.Configuration) func() error {
+func mutateGatewayConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, cfg *networkingv1beta1.Configuration, podIps []string) func() error {
 	return func() error {
 		if cfg.Labels == nil {
 			return fmt.Errorf("configuration %q has no labels", cfg.Name)
@@ -137,7 +168,7 @@ func mutateGatewayConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, 
 
 		fwcfg.SetLabels(forgeGatewayLabels(remoteClusterID))
 
-		spec, err := forgeGatewaySpec(cfg)
+		spec, err := forgeGatewaySpec(cfg, podIps)
 		if err != nil {
 			return err
 		}
