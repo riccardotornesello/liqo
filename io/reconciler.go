@@ -46,13 +46,13 @@ func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 	klog.Infof("Reconciling configuration %q", req.NamespacedName)
 
-	// Get the pods coming from the remote cluster.
 	remoteClusterID, err := getConfigurationRemoteClusterID(conf)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to get remote cluster ID for configuration %q: %w", req.NamespacedName, err)
 	}
 	klog.Infof("Configuration %q refers to remote cluster %q", req.NamespacedName, remoteClusterID)
 
+	// Get the pods coming from the remote cluster.
 	podList := &corev1.PodList{}
 	if err := r.Client.List(ctx, podList, client.MatchingLabels{
 		forge.LiqoOriginClusterIDKey: remoteClusterID,
@@ -60,20 +60,35 @@ func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{}, fmt.Errorf("unable to list pods: %w", err)
 	}
 
-	podIps := make([]string, 0, len(podList.Items))
+	destinationPodIps := make([]string, 0, len(podList.Items))
 	for _, pod := range podList.Items {
 		if pod.Status.PodIP != "" {
-			podIps = append(podIps, pod.Status.PodIP)
+			destinationPodIps = append(destinationPodIps, pod.Status.PodIP)
+		}
+	}
+
+	// Get the pods offloaded to the remote cluster: filter the pods by node name.
+	podList = &corev1.PodList{}
+	if err := r.Client.List(ctx, podList, client.MatchingLabels{
+		consts.LocalPodLabelKey: consts.LocalPodLabelValue,
+	}); err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to list pods: %w", err)
+	}
+
+	sourcePodIps := make([]string, 0, len(podList.Items))
+	for _, pod := range podList.Items {
+		if pod.Spec.NodeName == remoteClusterID && pod.Status.PodIP != "" {
+			sourcePodIps = append(sourcePodIps, pod.Status.PodIP)
 		}
 	}
 
 	// Reconcile the gateway FirewallConfiguration.
-	if err := createOrUpdateGatewayConfiguration(ctx, r.Client, conf, podIps); err != nil {
+	if err := createOrUpdateGatewayConfiguration(ctx, r.Client, conf, sourcePodIps, destinationPodIps); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update gateway configuration for configuration %q: %w", req.NamespacedName, err)
 	}
 
 	// Reconcile the fabric FirewallConfiguration.
-	if err := createOrUpdateFabricConfiguration(ctx, r.Client, conf, podIps); err != nil {
+	if err := createOrUpdateFabricConfiguration(ctx, r.Client, conf, destinationPodIps); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update fabric configuration for configuration %q: %w", req.NamespacedName, err)
 	}
 

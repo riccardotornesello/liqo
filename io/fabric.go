@@ -46,7 +46,7 @@ func forgeFabricSpec(cfg *networkingv1beta1.Configuration, podIps []string) (*ne
 	}
 
 	sets := []networkingv1beta1firewall.Set{{
-		Name:     podIPsSetName,
+		Name:     destinationPodIPsSetName,
 		KeyType:  networkingv1beta1firewall.SetDataTypeIPAddr,
 		Elements: setElements,
 	}}
@@ -68,7 +68,7 @@ func forgeFabricSpec(cfg *networkingv1beta1.Configuration, podIps []string) (*ne
 						{
 							IP: &networkingv1beta1firewall.MatchIP{
 								Position: networkingv1beta1firewall.MatchPositionSrc,
-								Value:    fmt.Sprintf("@%s", podIPsSetName),
+								Value:    fmt.Sprintf("@%s", destinationPodIPsSetName),
 							},
 							Op: networkingv1beta1firewall.MatchOperationNeq,
 						},
@@ -91,7 +91,7 @@ func forgeFabricSpec(cfg *networkingv1beta1.Configuration, podIps []string) (*ne
 						{
 							IP: &networkingv1beta1firewall.MatchIP{
 								Position: networkingv1beta1firewall.MatchPositionDst,
-								Value:    fmt.Sprintf("@%s", podIPsSetName),
+								Value:    fmt.Sprintf("@%s", destinationPodIPsSetName),
 							},
 							Op: networkingv1beta1firewall.MatchOperationEq,
 						},
