@@ -112,6 +112,18 @@ spec:
                         type: array
                     type: object
                 type: object
+              security:
+                description: SecurityOptions defines security options for the cluster.
+                properties:
+                  ingress:
+                    description: IngressPolicy defines the policy for ingress traffic
+                      from a remote cluster.
+                    enum:
+                    - allow
+                    - isolate
+                    - deny
+                    type: string
+                type: object
             type: object
           status:
             description: ConfigurationStatus defines the observed state of Configuration.

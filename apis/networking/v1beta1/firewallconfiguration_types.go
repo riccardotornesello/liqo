@@ -16,12 +16,25 @@ package v1beta1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	firewallapi "github.com/liqotech/liqo/apis/networking/v1beta1/firewall"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// FirewallConfigurationResource the name of the firewallconfiguration resources.
+var FirewallConfigurationResource = "firewallconfigurations"
+
+// FirewallConfigurationKind specifies the kind of the firewallconfiguration.
+var FirewallConfigurationKind = "FirewallConfiguration"
+
+// FirewallConfigurationGroupResource is group resource used to register these objects.
+var FirewallConfigurationGroupResource = schema.GroupResource{Group: GroupVersion.Group, Resource: FirewallConfigurationResource}
+
+// FirewallConfigurationGroupVersionResource is groupResourceVersion used to register these objects.
+var FirewallConfigurationGroupVersionResource = GroupVersion.WithResource(FirewallConfigurationResource)
 
 // FirewallConfigurationSpec defines the desired state of FirewallConfiguration.
 type FirewallConfigurationSpec struct {
