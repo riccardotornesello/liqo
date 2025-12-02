@@ -121,6 +121,7 @@ spec:
                     enum:
                     - allow
                     - isolate
+                    - deny
                     type: string
                 type: object
             type: object

@@ -50,62 +50,57 @@ func forgeGatewaySpec(cfg *networkingv1beta1.Configuration, podIps []string) (*n
 	}}
 
 	// Configure ingress rules based on the configuration spec
-	if cfg.Spec.Security != nil && cfg.Spec.Security.Ingress != nil {
-		switch *cfg.Spec.Security.Ingress {
-		case networkingv1beta1.IngressPolicyAllow:
-			// No specific rules needed, accept all traffic.
+	if cfg.Spec.Security != nil && cfg.Spec.Security.Ingress != nil && *cfg.Spec.Security.Ingress != networkingv1beta1.IngressPolicyAllow {
+		chainPolicy = networkingv1beta1firewall.ChainPolicyDrop
 
-		case networkingv1beta1.IngressPolicyIsolate:
-			chainPolicy = networkingv1beta1firewall.ChainPolicyDrop
+		filterRules = []networkingv1beta1firewall.FilterRule{
+			// Always accept traffic not coming from the tunnel interface or going to the main interface.
+			{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{{
+					Dev: &networkingv1beta1firewall.MatchDev{
+						Position: networkingv1beta1firewall.MatchDevPositionIn,
+						Value:    tunnel.TunnelInterfaceName,
+					},
+					Op: networkingv1beta1firewall.MatchOperationNeq,
+				}},
+			},
+			{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{{
+					Dev: &networkingv1beta1firewall.MatchDev{
+						Position: networkingv1beta1firewall.MatchDevPositionOut,
+						Value:    "eth0", // TODO: variable?
+					},
+					Op: networkingv1beta1firewall.MatchOperationEq,
+				}},
+			},
+			// Always allow established and related connections.
+			{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{{
+					CtState: &networkingv1beta1firewall.MatchCtState{
+						Value: []networkingv1beta1firewall.CtStateValue{"established", "related"},
+					},
+					Op: networkingv1beta1firewall.MatchOperationEq,
+				}},
+			},
+		}
 
-			filterRules = []networkingv1beta1firewall.FilterRule{
-				// Always accept traffic not coming from the tunnel interface or going to the main interface.
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{{
-						Dev: &networkingv1beta1firewall.MatchDev{
-							Position: networkingv1beta1firewall.MatchDevPositionIn,
-							Value:    tunnel.TunnelInterfaceName,
-						},
-						Op: networkingv1beta1firewall.MatchOperationNeq,
-					}},
-				},
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{{
-						Dev: &networkingv1beta1firewall.MatchDev{
-							Position: networkingv1beta1firewall.MatchDevPositionOut,
-							Value:    "eth0", // TODO: variable?
+		if *cfg.Spec.Security.Ingress != networkingv1beta1.IngressPolicyDeny {
+			// Accept only traffic destined to the cluster CIDR coming from the tunnel interface.
+			filterRules = append(filterRules, networkingv1beta1firewall.FilterRule{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{
+					{
+						IP: &networkingv1beta1firewall.MatchIP{
+							Position: networkingv1beta1firewall.MatchPositionDst,
+							Value:    fmt.Sprintf("@%s", podIPsSetName),
 						},
 						Op: networkingv1beta1firewall.MatchOperationEq,
-					}},
-				},
-				// Allow established and related connections.
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{{
-						CtState: &networkingv1beta1firewall.MatchCtState{
-							Value: []networkingv1beta1firewall.CtStateValue{"established", "related"},
-						},
-						Op: networkingv1beta1firewall.MatchOperationEq,
-					}},
-				},
-				// Accept only traffic destined to the cluster CIDR coming from the tunnel interface.
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{
-						{
-							IP: &networkingv1beta1firewall.MatchIP{
-								Position: networkingv1beta1firewall.MatchPositionDst,
-								Value:    fmt.Sprintf("@%s", podIPsSetName),
-							},
-							Op: networkingv1beta1firewall.MatchOperationEq,
-						},
 					},
 				},
-			}
-		default:
-			return nil, fmt.Errorf("unknown ingress policy: %q", *cfg.Spec.Security.Ingress)
+			})
 		}
 	}
 

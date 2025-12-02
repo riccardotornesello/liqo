@@ -23,7 +23,7 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // IngressPolicy defines the policy for ingress traffic from a remote cluster.
-// +kubebuilder:validation:Enum=allow;isolate
+// +kubebuilder:validation:Enum=allow;isolate;deny
 type IngressPolicy string
 
 const (
@@ -31,6 +31,8 @@ const (
 	IngressPolicyAllow IngressPolicy = "allow"
 	// IngressPolicyIsolate allows only traffic from owned namespaces.
 	IngressPolicyIsolate IngressPolicy = "isolate"
+	// IngressPolicyDeny denies all ingress traffic from a remote cluster.
+	IngressPolicyDeny IngressPolicy = "deny"
 )
 
 // ConfigurationResource the name of the configuration resources.
