@@ -1,4 +1,4 @@
-package main
+package ingress
 
 const (
 	// tableName is the name of the firewall table used by the gateway FirewallConfiguration.

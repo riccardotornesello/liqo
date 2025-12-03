@@ -1,4 +1,4 @@
-package main
+package ingress
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/liqotech/liqo/pkg/firewall"
 	"github.com/liqotech/liqo/pkg/utils/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -127,7 +128,7 @@ func forgeFabricSpec(cfg *networkingv1beta1.Configuration, podIps []string) (*ne
 	}, nil
 }
 
-func createOrUpdateFabricConfiguration(ctx context.Context, cl client.Client, cfg *networkingv1beta1.Configuration, podIps []string) error {
+func createOrUpdateFabricConfiguration(ctx context.Context, cl client.Client, cfg *networkingv1beta1.Configuration, podIps []string, scheme *runtime.Scheme) error {
 	remoteClusterID, err := getConfigurationRemoteClusterID(cfg)
 	if err != nil {
 		return err
@@ -144,7 +145,7 @@ func createOrUpdateFabricConfiguration(ctx context.Context, cl client.Client, cf
 
 	if _, err := resource.CreateOrUpdate(
 		ctx, cl, fwcfg,
-		mutateFabricConfiguration(fwcfg, cfg, podIps),
+		mutateFabricConfiguration(fwcfg, cfg, podIps, scheme),
 	); err != nil {
 		return err
 	}
@@ -154,7 +155,7 @@ func createOrUpdateFabricConfiguration(ctx context.Context, cl client.Client, cf
 	return nil
 }
 
-func mutateFabricConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, cfg *networkingv1beta1.Configuration, podIps []string) func() error {
+func mutateFabricConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, cfg *networkingv1beta1.Configuration, podIps []string, scheme *runtime.Scheme) func() error {
 	return func() error {
 		if cfg.Labels == nil {
 			return fmt.Errorf("configuration %q has no labels", cfg.Name)

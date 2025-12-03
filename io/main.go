@@ -4,6 +4,8 @@ import (
 	"flag"
 
 	networkingv1beta1 "github.com/liqotech/liqo/apis/networking/v1beta1"
+	"github.com/liqotech/liqo/io/ingress"
+	"github.com/liqotech/liqo/io/isolation"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -38,13 +40,23 @@ func main() {
 		panic(err)
 	}
 
-	//---------- RECONCILER
-	r := NewTestReconciler(
+	//---------- INGRESS RECONCILER
+	ir := ingress.NewIngressReconciler(
 		mgr.GetClient(),
 		mgr.GetScheme(),
 	)
 
-	if err = r.SetupWithManager(mgr); err != nil {
+	if err = ir.SetupWithManager(mgr); err != nil {
+		panic(err)
+	}
+
+	//---------- ISOLATION RECONCILER
+	is := isolation.NewIsolationReconciler(
+		mgr.GetClient(),
+		mgr.GetScheme(),
+	)
+
+	if err = is.SetupWithManager(mgr); err != nil {
 		panic(err)
 	}
 

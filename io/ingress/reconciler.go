@@ -1,4 +1,4 @@
-package main
+package ingress
 
 import (
 	"context"
@@ -21,19 +21,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-type TestReconciler struct {
+type IngressReconciler struct {
 	Client client.Client
 	Scheme *runtime.Scheme
 }
 
-func NewTestReconciler(cl client.Client, s *runtime.Scheme) *TestReconciler {
-	return &TestReconciler{
+func NewIngressReconciler(cl client.Client, s *runtime.Scheme) *IngressReconciler {
+	return &IngressReconciler{
 		Client: cl,
 		Scheme: s,
 	}
 }
 
-func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *IngressReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	klog.Infof("-----------------------------")
 
 	conf := &networkingv1beta1.Configuration{}
@@ -83,12 +83,12 @@ func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	}
 
 	// Reconcile the gateway FirewallConfiguration.
-	if err := createOrUpdateGatewayConfiguration(ctx, r.Client, conf, sourcePodIps, destinationPodIps); err != nil {
+	if err := createOrUpdateGatewayConfiguration(ctx, r.Client, conf, sourcePodIps, destinationPodIps, r.Scheme); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update gateway configuration for configuration %q: %w", req.NamespacedName, err)
 	}
 
 	// Reconcile the fabric FirewallConfiguration.
-	if err := createOrUpdateFabricConfiguration(ctx, r.Client, conf, destinationPodIps); err != nil {
+	if err := createOrUpdateFabricConfiguration(ctx, r.Client, conf, destinationPodIps, r.Scheme); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update fabric configuration for configuration %q: %w", req.NamespacedName, err)
 	}
 
@@ -97,7 +97,7 @@ func (r *TestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 	return ctrl.Result{}, nil
 }
 
-func (r *TestReconciler) podEnqueuer(ctx context.Context, obj client.Object) []ctrl.Request {
+func (r *IngressReconciler) podEnqueuer(ctx context.Context, obj client.Object) []ctrl.Request {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
 		klog.Errorf("Expected a Pod object but got %T", obj)
@@ -119,7 +119,7 @@ func (r *TestReconciler) podEnqueuer(ctx context.Context, obj client.Object) []c
 	return []ctrl.Request{{NamespacedName: types.NamespacedName{Name: nodeName, Namespace: forgeNamespaceName(nodeName)}}}
 }
 
-func (r *TestReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *IngressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	filterByLabelsPredicate, err := predicate.LabelSelectorPredicate(metav1.LabelSelector{
 		MatchLabels: map[string]string{
 			configuration.Configured: configuration.ConfiguredValue,

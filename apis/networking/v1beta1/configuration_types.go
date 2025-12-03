@@ -35,6 +35,19 @@ const (
 	IngressPolicyDeny IngressPolicy = "deny"
 )
 
+// IsolationPolicy defines the isolation policy for traffic between different consumers.
+// +kubebuilder:validation:Enum=none;peerings;full
+type IsolationPolicy string
+
+const (
+	// IsolationPolicyAllow disables isolation between different consumers.
+	IsolationPolicyAllow IsolationPolicy = "allow"
+	// IsolationPolicyPeerings blocks incoming connections from different peerings.
+	IsolationPolicyPeerings IsolationPolicy = "peerings"
+	// IsolationPolicyFull enables isolation between different consumers and drops traffic coming from the provided cluster.
+	IsolationPolicyFull IsolationPolicy = "full"
+)
+
 // ConfigurationResource the name of the configuration resources.
 var ConfigurationResource = "configurations"
 
@@ -63,8 +76,10 @@ type ClusterConfig struct {
 
 // SecurityOptions defines security options for the cluster.
 type SecurityOptions struct {
-	// IngressPolicy defines the policy for ingress traffic from a remote cluster.
+	// Ingress defines the policy for ingress traffic from a remote cluster.
 	Ingress *IngressPolicy `json:"ingress,omitempty"`
+	// Isolation defines the isolation policy for traffic between different consumers.
+	Isolation *IsolationPolicy `json:"isolation,omitempty"`
 }
 
 // ConfigurationSpec defines the desired state of Configuration.

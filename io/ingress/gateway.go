@@ -1,4 +1,4 @@
-package main
+package ingress
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/liqotech/liqo/pkg/gateway/tunnel"
 	"github.com/liqotech/liqo/pkg/utils/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -148,7 +149,7 @@ func forgeGatewaySpec(cfg *networkingv1beta1.Configuration, sourcePodIps, destin
 	}, nil
 }
 
-func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, cfg *networkingv1beta1.Configuration, sourcePodIps, destinationPodIps []string) error {
+func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, cfg *networkingv1beta1.Configuration, sourcePodIps, destinationPodIps []string, scheme *runtime.Scheme) error {
 	remoteClusterID, err := getConfigurationRemoteClusterID(cfg)
 	if err != nil {
 		return err
@@ -165,7 +166,7 @@ func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, c
 
 	if _, err := resource.CreateOrUpdate(
 		ctx, cl, fwcfg,
-		mutateGatewayConfiguration(fwcfg, cfg, sourcePodIps, destinationPodIps),
+		mutateGatewayConfiguration(fwcfg, cfg, sourcePodIps, destinationPodIps, scheme),
 	); err != nil {
 		return err
 	}
@@ -175,7 +176,7 @@ func createOrUpdateGatewayConfiguration(ctx context.Context, cl client.Client, c
 	return nil
 }
 
-func mutateGatewayConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, cfg *networkingv1beta1.Configuration, sourcePodIps, destinationPodIps []string) func() error {
+func mutateGatewayConfiguration(fwcfg *networkingv1beta1.FirewallConfiguration, cfg *networkingv1beta1.Configuration, sourcePodIps, destinationPodIps []string, scheme *runtime.Scheme) func() error {
 	return func() error {
 		if cfg.Labels == nil {
 			return fmt.Errorf("configuration %q has no labels", cfg.Name)

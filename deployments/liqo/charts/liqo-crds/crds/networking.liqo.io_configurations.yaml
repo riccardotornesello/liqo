@@ -116,12 +116,20 @@ spec:
                 description: SecurityOptions defines security options for the cluster.
                 properties:
                   ingress:
-                    description: IngressPolicy defines the policy for ingress traffic
-                      from a remote cluster.
+                    description: Ingress defines the policy for ingress traffic from
+                      a remote cluster.
                     enum:
                     - allow
                     - isolate
                     - deny
+                    type: string
+                  isolation:
+                    description: Isolation defines the isolation policy for traffic
+                      between different consumers.
+                    enum:
+                    - none
+                    - peerings
+                    - full
                     type: string
                 type: object
             type: object
