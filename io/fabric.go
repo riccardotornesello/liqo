@@ -52,67 +52,59 @@ func forgeFabricSpec(cfg *networkingv1beta1.Configuration, podIps []string) (*ne
 	}}
 
 	// Configure ingress rules based on the configuration spec
-	if cfg.Spec.Security != nil && cfg.Spec.Security.Ingress != nil {
-		switch *cfg.Spec.Security.Ingress {
-		case networkingv1beta1.IngressPolicyAllow:
-			// No specific rules needed, accept all traffic.
+	if cfg.Spec.Security != nil && cfg.Spec.Security.Ingress != nil && *cfg.Spec.Security.Ingress != networkingv1beta1.IngressPolicyAllow {
+		chainPolicy = networkingv1beta1firewall.ChainPolicyDrop
 
-		case networkingv1beta1.IngressPolicyIsolate:
-			chainPolicy = networkingv1beta1firewall.ChainPolicyDrop
-
-			filterRules = []networkingv1beta1firewall.FilterRule{
-				// Only consider traffic from offloaded pods.
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{
-						{
-							IP: &networkingv1beta1firewall.MatchIP{
-								Position: networkingv1beta1firewall.MatchPositionSrc,
-								Value:    fmt.Sprintf("@%s", destinationPodIPsSetName),
-							},
-							Op: networkingv1beta1firewall.MatchOperationNeq,
+		filterRules = []networkingv1beta1firewall.FilterRule{
+			// Only consider traffic from offloaded pods.
+			{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{
+					{
+						IP: &networkingv1beta1firewall.MatchIP{
+							Position: networkingv1beta1firewall.MatchPositionSrc,
+							Value:    fmt.Sprintf("@%s", destinationPodIPsSetName),
 						},
+						Op: networkingv1beta1firewall.MatchOperationNeq,
 					},
 				},
-				// Allow established and related connections.
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{{
-						CtState: &networkingv1beta1firewall.MatchCtState{
-							Value: []networkingv1beta1firewall.CtStateValue{"established", "related"},
+			},
+			// Allow established and related connections.
+			{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{{
+					CtState: &networkingv1beta1firewall.MatchCtState{
+						Value: []networkingv1beta1firewall.CtStateValue{"established", "related"},
+					},
+					Op: networkingv1beta1firewall.MatchOperationEq,
+				}},
+			},
+			// Accept traffic destined to the offloaded pods.
+			{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{
+					{
+						IP: &networkingv1beta1firewall.MatchIP{
+							Position: networkingv1beta1firewall.MatchPositionDst,
+							Value:    fmt.Sprintf("@%s", destinationPodIPsSetName),
 						},
 						Op: networkingv1beta1firewall.MatchOperationEq,
-					}},
-				},
-				// Accept traffic destined to the offloaded pods.
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{
-						{
-							IP: &networkingv1beta1firewall.MatchIP{
-								Position: networkingv1beta1firewall.MatchPositionDst,
-								Value:    fmt.Sprintf("@%s", destinationPodIPsSetName),
-							},
-							Op: networkingv1beta1firewall.MatchOperationEq,
-						},
 					},
 				},
-				// Accept traffic to the remote cluster CIDR.
-				{
-					Action: networkingv1beta1firewall.ActionAccept,
-					Match: []networkingv1beta1firewall.Match{
-						{
-							IP: &networkingv1beta1firewall.MatchIP{
-								Position: networkingv1beta1firewall.MatchPositionDst,
-								Value:    remoteCIDR.String(),
-							},
-							Op: networkingv1beta1firewall.MatchOperationEq,
+			},
+			// Accept traffic to the remote cluster CIDR.
+			{
+				Action: networkingv1beta1firewall.ActionAccept,
+				Match: []networkingv1beta1firewall.Match{
+					{
+						IP: &networkingv1beta1firewall.MatchIP{
+							Position: networkingv1beta1firewall.MatchPositionDst,
+							Value:    remoteCIDR.String(),
 						},
+						Op: networkingv1beta1firewall.MatchOperationEq,
 					},
 				},
-			}
-		default:
-			return nil, fmt.Errorf("unknown ingress policy: %q", *cfg.Spec.Security.Ingress)
+			},
 		}
 	}
 
