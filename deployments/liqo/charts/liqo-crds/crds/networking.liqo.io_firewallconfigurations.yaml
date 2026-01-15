@@ -470,6 +470,7 @@ spec:
                         dataType:
                           description: DataType is the type of the set data.
                           enum:
+                          - integer
                           - ipv4_addr
                           type: string
                         elements:
@@ -491,6 +492,7 @@ spec:
                         keyType:
                           description: KeyType is the type of the set keys.
                           enum:
+                          - integer
                           - ipv4_addr
                           type: string
                         name:
