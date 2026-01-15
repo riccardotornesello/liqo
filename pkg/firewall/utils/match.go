@@ -72,6 +72,10 @@ func applyMatchIP(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp) 
 		return applyMatchIPSingleIP(m, rule, op)
 	case firewallv1beta1.IPValueTypeSubnet:
 		return applyMatchIPPoolSubnet(m, rule, op)
+	case firewallv1beta1.IPValueTypeRange:
+		return applyMatchIPRange(m, rule, op)
+	case firewallv1beta1.IPValueTypeNamedSet:
+		return applyMatchIPNamedSet(m, rule, op)
 	default:
 		return fmt.Errorf("invalid match value type %s", matchIPValueType)
 	}
@@ -246,6 +250,75 @@ func applyMatchPort(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp
 	default:
 		return fmt.Errorf("invalid match value type %s", matchPortValueType)
 	}
+}
+
+func applyMatchIPRange(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp) error {
+	posOffset, err := getMatchIPPositionOffset(m)
+	if err != nil {
+		return err
+	}
+
+	startIP, endIP, err := GetIPValueRange(m.IP.Value)
+	if err != nil || startIP == nil || endIP == nil {
+		return err
+	}
+
+	startIPBytes := startIP.To4()
+	endIPBytes := endIP.To4()
+
+	if startIPBytes == nil || endIPBytes == nil {
+		return fmt.Errorf("invalid IPv4 addresses: startIP=%v, endIP=%v, err=%w", startIP, endIP, err)
+	}
+
+	rule.Exprs = append(rule.Exprs,
+		&expr.Payload{
+			DestRegister: 1,
+			Base:         expr.PayloadBaseNetworkHeader,
+			Offset:       posOffset,
+			Len:          4,
+		},
+		&expr.Range{
+			Op:       op,
+			Register: 1,
+			FromData: startIPBytes,
+			ToData:   endIPBytes,
+		},
+	)
+
+	return nil
+}
+
+func applyMatchIPNamedSet(m *firewallv1beta1.Match, rule *nftables.Rule, op expr.CmpOp) error {
+	invert := false
+	if op == expr.CmpOpNeq {
+		invert = true
+	}
+
+	posOffset, err := getMatchIPPositionOffset(m)
+	if err != nil {
+		return err
+	}
+
+	setName, err := GetIPValueNamedSet(m.IP.Value)
+	if err != nil {
+		return err
+	}
+
+	rule.Exprs = append(rule.Exprs,
+		&expr.Payload{
+			DestRegister: 1,
+			Base:         expr.PayloadBaseNetworkHeader,
+			Offset:       posOffset,
+			Len:          4,
+		},
+		&expr.Lookup{
+			SourceRegister: 1,
+			SetName:        setName,
+			Invert:         invert,
+		},
+	)
+
+	return nil
 }
 
 func getMatchCmpOp(m *firewallv1beta1.Match) (expr.CmpOp, error) {
