@@ -472,6 +472,7 @@ spec:
                           enum:
                           - integer
                           - ipv4_addr
+                          - ipv4_cidr
                           type: string
                         elements:
                           description: Elements are the elements of the set.
@@ -494,6 +495,7 @@ spec:
                           enum:
                           - integer
                           - ipv4_addr
+                          - ipv4_cidr
                           type: string
                         name:
                           description: Name is the name of the set.
